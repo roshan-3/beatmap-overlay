@@ -25,7 +25,9 @@ from typing import Optional
 import psutil
 
 # Add parent directory so we can import osu_parser / feature_extractor
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# (skipped when running as a PyInstaller bundle — modules are already bundled)
+if not getattr(sys, "frozen", False):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from feature_extractor import extract_features, compute_strain_sections
 from osu_parser import parse_osu_file
 
