@@ -47,14 +47,10 @@ python classify.py maps/
 python classify.py maps/ --out results.json --pretty
 ```
 
-## Known Limitations
+## Intended Future Features
 
-- **Pattern classification accuracy**: Stream, jump, and tech labels are based on note-level heuristics (stream gap, jump distance, direction change frequency). They give a reasonable approximation but won't always match how a map actually feels to play. Classification accuracy needs heavy improvement but lots of feedback is necessary.
-
-- **Skillset coverage**: The overlay currently represents aim and speed (streams/jumps/tech). Skillsets like reading, finger control, and consistency are not measured.
-
-- **Difficulty switching**: If the overlay doesn't update when switching between difficulties of the same song, run the following in an admin terminal and restart your PC:
-  ```
-  fsutil behavior set disablelastaccess 0
-  ```
-  This re-enables file access time tracking, which the overlay uses to detect which difficulty is selected.
+- **More Customizability in terms of metrics being displayed and overall aesthetic appearance**
+- **Smoother animations**
+- **Better pattern recognition accuracy**
+- **More skillset coverage (reading, finger control, consistency, etc)**
+- **Better performance on lower end PCs**
