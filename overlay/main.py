@@ -11,6 +11,12 @@ The overlay window appears in the top-right corner.
 from __future__ import annotations
 
 import queue
+import sys
+from pathlib import Path
+
+# Ensure the overlay directory is on sys.path so detector/gui are importable
+# both when running from source and inside a PyInstaller bundle.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from detector import MapDetector
 from gui import OverlayWindow
