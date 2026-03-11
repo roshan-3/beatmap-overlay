@@ -289,14 +289,21 @@ def extract_features(bm: Beatmap) -> dict[str, Any]:
 #   otherwise     →  flow   (green)
 
 
-def compute_strain_sections(path: str) -> list[dict]:
+def compute_strain_sections(path: str, bm=None) -> list[dict]:
     """
     Return per-section difficulty using rosu-pp-py.
 
+    Star ratings come from rosu-pp-py (same engine osu! uses).
+    Pattern classification uses note-level features when *bm* is provided:
+        stream_ratio  > 0.45  →  stream  (red)
+        avg_distance  > 150px →  jump    (blue)
+        dir_change_freq > 0.35 → tech    (yellow)
+        otherwise             →  stream  (default)
+
     Each dict:
-        t_start, t_end, t_mid  – ms (relative to map audio start)
+        t_start, t_end, t_mid  – ms
         star_rating            – osu! ★ scaled to match official rating
-        pattern                – "stream" | "jump" | "tech" | "flow"
+        pattern                – "stream" | "jump" | "tech"
         color                  – hex colour for the pattern
     """
     if not path:
@@ -327,24 +334,83 @@ def compute_strain_sections(path: str) -> list[dict]:
         # Scale so the hardest section equals the map's true star rating
         star_scale = overall / max_comb
 
+        # Pre-compute per-section note features when beatmap data is available
+        note_features: list[dict] = []
+        if bm is not None:
+            active = [o for o in bm.hit_objects if not o.is_spinner]
+            circles = [o for o in active if not o.is_slider]
+            # dominant bpm for stream threshold
+            dom_bpm_val = _dominant_bpm(bm, active)
+            threshold_bpm = max(dom_bpm_val * 0.9, _STREAM_MIN_BPM)
+            max_gap = 60_000 / (2 * threshold_bpm)
+
+            for i in range(n):
+                t0 = float(i * sec_ms)
+                t1 = float((i + 1) * sec_ms)
+
+                # Notes whose time falls in [t0, t1)
+                sec_objs = [o for o in active if t0 <= o.time < t1]
+                sec_circles = [o for o in circles if t0 <= o.time < t1]
+
+                # stream ratio: consecutive circle pairs within stream gap
+                stream_notes = 0
+                for j in range(len(sec_circles) - 1):
+                    if sec_circles[j + 1].time - sec_circles[j].time <= max_gap:
+                        stream_notes += 2 if stream_notes == 0 else 1
+                stream_ratio = stream_notes / len(sec_circles) if sec_circles else 0.0
+
+                # avg distance between consecutive objects
+                dists = [_dist(sec_objs[j], sec_objs[j + 1])
+                         for j in range(len(sec_objs) - 1)]
+                avg_dist = _safe_mean(dists)
+
+                # direction change frequency
+                dir_changes = 0
+                for j in range(1, len(sec_objs) - 1):
+                    turn = _direction_change(sec_objs[j - 1], sec_objs[j], sec_objs[j + 1])
+                    if abs(turn) > 45:
+                        dir_changes += 1
+                dir_change_freq = dir_changes / len(sec_objs) if sec_objs else 0.0
+
+                note_features.append({
+                    "stream_ratio":    stream_ratio,
+                    "avg_distance":    avg_dist,
+                    "dir_change_freq": dir_change_freq,
+                })
+
         sections: list[dict] = []
         for i in range(n):
-            aim  = aim_arr[i]
-            spd  = spd_arr[i]
             comb = combined[i]
             star = comb * star_scale
 
-            # Pattern from aim/speed ratio
-            if comb < max_comb * 0.04:
-                pattern, color = "stream", "#ff6b6b"   # break / silent
-            elif spd > 0 and aim / (spd + 1e-9) < 0.45:
-                pattern, color = "stream", "#ff6b6b"   # speed dominant
-            elif aim > 0 and spd / (aim + 1e-9) < 0.45:
-                pattern, color = "jump",   "#4fc3f7"   # aim dominant
-            elif comb > max_comb * 0.65:
-                pattern, color = "tech",   "#ffd54f"   # both high
+            if note_features:
+                nf = note_features[i]
+                sr  = nf["stream_ratio"]
+                ad  = nf["avg_distance"]
+                dcf = nf["dir_change_freq"]
+
+                if sr > 0.45:
+                    pattern, color = "stream", "#ff6b6b"
+                elif ad > 150:
+                    pattern, color = "jump",   "#4fc3f7"
+                elif dcf > 0.35:
+                    pattern, color = "tech",   "#ffd54f"
+                else:
+                    pattern, color = "stream", "#ff6b6b"
             else:
-                pattern, color = "stream", "#ff6b6b"
+                # Fallback: aim/speed ratio when no beatmap data
+                aim = aim_arr[i]
+                spd = spd_arr[i]
+                if comb < max_comb * 0.04:
+                    pattern, color = "stream", "#ff6b6b"
+                elif spd > 0 and aim / (spd + 1e-9) < 0.45:
+                    pattern, color = "stream", "#ff6b6b"
+                elif aim > 0 and spd / (aim + 1e-9) < 0.45:
+                    pattern, color = "jump",   "#4fc3f7"
+                elif comb > max_comb * 0.65:
+                    pattern, color = "tech",   "#ffd54f"
+                else:
+                    pattern, color = "stream", "#ff6b6b"
 
             sections.append({
                 "t_start":     float(i * sec_ms),

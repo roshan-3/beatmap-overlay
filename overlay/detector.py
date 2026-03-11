@@ -193,6 +193,6 @@ class MapDetector(threading.Thread):
             bm = parse_osu_file(path)
             feats = extract_features(bm)
             feats["_file"]     = key
-            feats["_sections"] = compute_strain_sections(path=key)
+            feats["_sections"] = compute_strain_sections(path=key, bm=bm)
             self._cache[key]  = feats
         return self._cache[key]
